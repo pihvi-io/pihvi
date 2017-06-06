@@ -1,0 +1,89 @@
+#!/bin/bash
+#set -x
+
+# Always run commands in the pihvi installation directory	
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd $DIR/..
+
+setup_macos () {
+	
+	vars='$HOSTMACHINE_IP'
+
+	# Create a custom alias for localhost which can be resolved
+	echo "Automatically create 10.254.254.254<->127.0.0.1 alias on startup..."	
+	render_template templates/pihvi.loopback.alias.plist.tmpl "$vars" | sudo tee /Library/LaunchDaemons/pihvi.loopback.alias.plist > /dev/null
+
+	# Start the 10.254.254.254 interface now too
+	sudo ifconfig lo0 alias $HOSTMACHINE_IP
+
+	# Create a custom dns resolver for *.test addresses
+	echo "Setting up dns resolver for *.test addresses in /etc/resolver/test..."
+	render_template templates/resolver.tmpl "$vars" | sudo tee /etc/resolver/test > /dev/null
+
+	# Create a custom CA certificate
+	if [ ! -f ~/.pihvi/certs/ca.key ] || [ ! -f ~/.pihvi/certs/ca.crt ]; then
+		echo "Creating a CA certificate for self-signing https certificates in local development..."
+		mkdir -p ~/.pihvi/certs
+	    docker run --rm -t -v ~/.pihvi/certs:/certs pihvio/openssl req -x509 -newkey rsa:2048 -days 7300 -keyout /certs/ca.key \
+		    -out /certs/ca.crt -nodes \
+		    -subj "/O=Pihvi.io CA/OU=Pihvi.io self-signed certificate /CN=Pihvi.io local development Root CA"
+
+		echo "Adding the CA certificate to system trustchain"
+		sudo security add-trusted-cert -d -r trustRoot -k '/Library/Keychains/System.keychain' ~/.pihvi/certs/ca.crt
+	fi
+
+	echo ""
+	echo "FINAL STEP: Check that you have these settings in Docker-for-Mac->Preferences->Daemon->Advanced:"
+	render_template templates/daemon.json.tmpl "$vars"
+
+	echo "Copy paste these and press 'Apply & Restart'"
+}
+
+# Renders .tmpl file with envsubst
+render_template() {
+	template=$1
+	vars=$2
+	docker_options=""
+
+	# Create -e separated list of all
+	for element in $(echo $vars | sed "s/:/ /g")
+	do
+	    docker_options+=" -e ${element#?}=$(eval echo $element)"
+	done
+
+	# Run the envsubst command inside a docker container
+	docker run --rm -t -e VARS=$VARS $docker_options pihvio/envsubst "$(cat $template)"
+}
+
+setup_linux() {
+	echo "Linux is not yet supported..."
+	exit 1
+}
+
+# Check which platform is used
+platform='unknown'
+unamestr=`uname`
+if [[ "$unamestr" == 'Linux' ]]; then
+   platform='linux'
+   export HOSTMACHINE_IP='172.17.42.1'
+elif [[ "$unamestr" == 'Darwin' ]]; then
+   platform='macos'
+   # This works too but Mac can't bind to this address on hostmachine
+   #export HOSTMACHINE_IP='192.168.65.1'
+   export HOSTMACHINE_IP='10.254.254.254'
+fi
+
+if [[ "$1" == 'setup' ]]; then
+	echo "NOTE: Setup needs to do few system changes and will prompt for sudo..."
+	case $platform in
+	linux)
+	  setup_linux
+	;;
+	macos)
+	  setup_macos
+	;;
+	esac
+else
+	# Use docker-compose.yml in the pihvi folder for rest of commands
+	docker-compose "$@"
+fi

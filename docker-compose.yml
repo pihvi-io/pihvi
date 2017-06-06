@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  nginx:
+    image: pihvio/nginx-proxy
+    network_mode: "bridge"
+    volumes:
+      # Mount self-signed certificates
+      - ${HOME}/.pihvi/certs:/etc/nginx/certs:rw
+
+      # Mount docker socket to automatically create the vhosts for services
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      HOSTMACHINE_IP: ${HOSTMACHINE_IP} # This way we can pass the real ip address to docker services
+    restart: always
+
+  dnsmasq:
+    image: andyshinn/dnsmasq
+    ports:
+      - 53:53/tcp
+      - 53:53/udp
+    cap_add:
+      - NET_ADMIN
+    command: "--address=/test/${HOSTMACHINE_IP}"
+    restart: always
