@@ -1,16 +1,13 @@
 #!/bin/bash
-#set -x
-
-# Always run commands in the pihvi installation directory	
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd $DIR/..
+set -e
 
 setup_macos () {
 	
 	vars='$HOSTMACHINE_IP'
 
 	# Create a custom alias for localhost which can be resolved
-	echo "Automatically create 10.254.254.254<->127.0.0.1 alias on startup..."	
+	echo "Create 10.254.254.254 alias for localhost..."	
+	# This ensures that the alias will be enabled after boot
 	render_template templates/pihvi.loopback.alias.plist.tmpl "$vars" | sudo tee /Library/LaunchDaemons/pihvi.loopback.alias.plist > /dev/null
 
 	# Start the 10.254.254.254 interface now too
@@ -32,22 +29,24 @@ setup_macos () {
 		sudo security add-trusted-cert -d -r trustRoot -k '/Library/Keychains/System.keychain' ~/.pihvi/certs/ca.crt
 	fi
 
-	echo ""
-	echo "FINAL STEP: Check that you have these settings in Docker-for-Mac->Preferences->Daemon->Advanced:"
-	render_template templates/daemon.json.tmpl "$vars"
+	# Check the automatic resolv.conf and ask user to add custom dns
+	if ! docker run --rm -i alpine cat /etc/resolv.conf | grep $HOSTMACHINE_IP > /dev/null; then
+		echo ""
+		echo "FINAL STEP: Check that you have these settings in Docker-for-Mac->Preferences->Daemon->Advanced:"
+		render_template templates/daemon.json.tmpl "$vars"
 
-	echo "Copy paste these and press 'Apply & Restart'"
+		echo "Copy paste these and press 'Apply & Restart'"
+	fi
 }
 
 # Renders .tmpl file with envsubst
 render_template() {
-	template=$1
-	vars=$2
-	docker_options=""
+	local template=$1
+	local vars=$2
+	local docker_options=""
 
 	# Create -e separated list of all
-	for element in $(echo $vars | sed "s/:/ /g")
-	do
+	for element in $(echo $vars | sed "s/:/ /g"); do
 	    docker_options+=" -e ${element#?}=$(eval echo $element)"
 	done
 
@@ -60,18 +59,49 @@ setup_linux() {
 	exit 1
 }
 
+delete_macos() {
+	# Remove files
+	if [ -f /etc/resolver/test ]; then
+		sudo rm /etc/resolver/test
+	fi
+	if [ -f /Library/LaunchDaemons/pihvi.loopback.alias.plist ]; then
+		sudo rm /Library/LaunchDaemons/pihvi.loopback.alias.plist
+	fi
+
+	# Untrust generated root certificate
+	if [ -f ~/.pihvi/certs/ca.crt ]; then
+		sudo security remove-trusted-cert -d ~/.pihvi/certs/ca.crt
+	fi
+}
+delete_linux() {
+	echo "Linux is not yet supported..."
+	exit 1
+}
+delete_shared() {
+	# Remove generated files
+	if [ -d ~/.pihvi ]; then
+		rm -r ~/.pihvi
+	fi
+}
+
 # Check which platform is used
 platform='unknown'
 unamestr=`uname`
 if [[ "$unamestr" == 'Linux' ]]; then
    platform='linux'
    export HOSTMACHINE_IP='172.17.42.1'
+   DIR="$(dirname $([ -L $0 ] && readlink -f $0 || echo $0))/.."
 elif [[ "$unamestr" == 'Darwin' ]]; then
    platform='macos'
    # This works too but Mac can't bind to this address on hostmachine
    #export HOSTMACHINE_IP='192.168.65.1'
    export HOSTMACHINE_IP='10.254.254.254'
+   DIR="$(dirname $([ -L $0 ] && readlink $0 || echo $0))/.."
 fi
+
+# Switch to the project
+cd $DIR
+
 
 if [[ "$1" == 'setup' ]]; then
 	echo "NOTE: Setup needs to do few system changes and will prompt for sudo..."
@@ -83,6 +113,34 @@ if [[ "$1" == 'setup' ]]; then
 	  setup_macos
 	;;
 	esac
+
+	docker-compose up -d --force-recreate --remove-orphans
+elif [[ "$1" == 'remove' ]] || [[ "$1" == 'delete' ]]; then
+	echo "Removing pihvi settings and tools. Sudo is needed to remove the system changes..."
+	set +e
+	case $platform in
+	linux)
+	  delete_linux
+	;;
+	macos)
+	  delete_macos
+	;;
+	esac
+
+	# Remove all created containers
+	if [[ $(docker-compose ps -q) ]]; then
+		docker-compose stop
+		docker-compose rm -f
+	fi
+
+	# Remove rest of the files
+	delete_shared
+elif [[ "$1" == 'update' ]]; then
+	git fetch
+	git reset origin/master --hard
+elif [[ "$1" == 'reload' ]]; then
+	docker-compose pull
+	docker-compose up -d --force-recreate --remove-orphans
 else
 	# Use docker-compose.yml in the pihvi folder for rest of commands
 	docker-compose "$@"
