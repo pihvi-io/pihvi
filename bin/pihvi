@@ -1,9 +1,5 @@
 #!/bin/bash
-#set -x
-
-# Always run commands in the pihvi installation directory	
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd $DIR/..
+set -e
 
 setup_macos () {
 	
@@ -20,6 +16,44 @@ setup_macos () {
 	echo "Setting up dns resolver for *.test addresses in /etc/resolver/test..."
 	render_template templates/resolver.tmpl "$vars" | sudo tee /etc/resolver/test > /dev/null
 
+	# Creates ca certificates
+	if create_ca_cert; then
+		echo "Adding the CA certificate to system trustchain"
+		sudo security add-trusted-cert -d -r trustRoot -k '/Library/Keychains/System.keychain' ~/.pihvi/certs/ca.crt
+	fi
+
+
+	echo "Checking Docker nameserver settings..."
+	if ! check_docker_nameserver; then
+		# Check that docker is running
+		open -a docker
+
+		echo ""
+		echo "FINAL STEP: Check that you have these settings in Docker-for-Mac->Preferences->Daemon->Advanced:"
+		echo "========================================"
+		render_template templates/daemon.json.tmpl "$vars"
+		echo "========================================"
+
+		echo "Copy paste these settings and press 'Apply & Restart'"
+		echo "Press enter after you have done this..."
+		while true; do
+			read input_variable
+			if check_docker_nameserver; then
+				break
+			else
+				echo "Try again..."
+			fi
+		done
+	fi
+	echo "Setup complete!"
+}
+
+# Check that $HOSTMACHINE_IP is used as nameserver for docker containers
+check_docker_nameserver() {
+	docker run --rm -t alpine cat /etc/resolv.conf | grep  "nameserver $HOSTMACHINE_IP" > /dev/null
+}
+
+create_ca_cert () {
 	# Create a custom CA certificate
 	if [ ! -f ~/.pihvi/certs/ca.key ] || [ ! -f ~/.pihvi/certs/ca.crt ]; then
 		echo "Creating a CA certificate for self-signing https certificates in local development..."
@@ -27,16 +61,9 @@ setup_macos () {
 	    docker run --rm -t -v ~/.pihvi/certs:/certs pihvio/openssl req -x509 -newkey rsa:2048 -days 7300 -keyout /certs/ca.key \
 		    -out /certs/ca.crt -nodes \
 		    -subj "/O=Pihvi.io CA/OU=Pihvi.io self-signed certificate /CN=Pihvi.io local development Root CA"
-
-		echo "Adding the CA certificate to system trustchain"
-		sudo security add-trusted-cert -d -r trustRoot -k '/Library/Keychains/System.keychain' ~/.pihvi/certs/ca.crt
+		return 0
 	fi
-
-	echo ""
-	echo "FINAL STEP: Check that you have these settings in Docker-for-Mac->Preferences->Daemon->Advanced:"
-	render_template templates/daemon.json.tmpl "$vars"
-
-	echo "Copy paste these and press 'Apply & Restart'"
+	return 1
 }
 
 # Renders .tmpl file with envsubst
@@ -56,8 +83,25 @@ render_template() {
 }
 
 setup_linux() {
-	echo "Linux is not yet supported..."
-	exit 1
+	# Setup .test resolving
+	if [ -f /etc/resolvconf/resolv.conf.d/head ]; then
+
+		if ! grep -q $HOSTMACHINE_IP /etc/resolvconf/resolv.conf.d/head; then
+			echo "nameserver $HOSTMACHINE_IP" >> /etc/resolvconf/resolv.conf.d/head
+		fi
+	else
+		if ! grep -q $HOSTMACHINE_IP /etc/resolv.conf; then
+			echo -e "nameserver $HOSTMACHINE_IP\n$(cat /etc/resolv.conf)" > /etc/resolv.conf
+		fi
+	fi
+	
+	# Creates ca certificates
+	create_ca_cert
+	if [ ! -f /usr/local/share/ca-certificates/pihvi.crt ]; then
+		echo "Adding the CA certificate to system trustchain"
+		cp ~/.pihvi/certs/ca.crt /usr/local/share/ca-certificates/pihvi.crt
+		sudo update-ca-certificates
+	fi
 }
 
 # Check which platform is used
@@ -65,7 +109,7 @@ platform='unknown'
 unamestr=`uname`
 if [[ "$unamestr" == 'Linux' ]]; then
    platform='linux'
-   export HOSTMACHINE_IP='172.17.42.1'
+   export HOSTMACHINE_IP=$(ifconfig docker0 | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p')
 elif [[ "$unamestr" == 'Darwin' ]]; then
    platform='macos'
    # This works too but Mac can't bind to this address on hostmachine
