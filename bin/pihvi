@@ -172,7 +172,7 @@ elif [[ "$1" == 'remove' ]] || [[ "$1" == 'delete' ]]; then
 	;;
 	esac
 
-	# Remove all created containers
+	# Remove all created service containers from pihvi
 	if [[ $(docker-compose ps -q) ]]; then
 		docker-compose stop
 		docker-compose rm -f

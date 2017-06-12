@@ -26,3 +26,8 @@ services:
       - NET_ADMIN
     command: "--address=/test/${HOSTMACHINE_IP}"
     restart: always
+    # Always use non-local dns services for this container
+    # In this case default to google
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
