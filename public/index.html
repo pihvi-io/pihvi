@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Huijari - Suomalainen Huijauspeli</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Main Menu -->
+    <div id="menu-screen" class="screen active">
+      <div class="container">
+        <h1 class="title">HUIJARI</h1>
+        <p class="subtitle">Huijaa ystavasi suomalaisilla faktoilla!</p>
+
+        <div class="menu-form">
+          <input type="text" id="player-name" placeholder="Nimesi" maxlength="20" autocomplete="off">
+
+          <div class="button-group">
+            <button id="create-btn" class="btn btn-primary">Luo Huone</button>
+            <button id="join-btn" class="btn btn-secondary">Liity Peliin</button>
+          </div>
+
+          <div id="join-form" class="hidden">
+            <input type="text" id="room-code" placeholder="Huoneen koodi" maxlength="4" autocomplete="off">
+            <button id="join-confirm-btn" class="btn btn-primary">Liity</button>
+          </div>
+        </div>
+
+        <div class="instructions">
+          <h3>Miten pelataan?</h3>
+          <ol>
+            <li>Naet kysymyksen, jossa on tyhja kohta</li>
+            <li>Keksi uskottava vale-vastaus</li>
+            <li>Aanesta: mika on oikea vastaus?</li>
+            <li>Saat pisteet oikeasta vastauksesta ja jos huijasit muita!</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lobby -->
+    <div id="lobby-screen" class="screen">
+      <div class="container">
+        <h2>Huone: <span id="room-code-display"></span></h2>
+        <p class="waiting-text">Odotetaan pelaajia...</p>
+
+        <div id="player-list" class="player-list"></div>
+
+        <button id="start-game-btn" class="btn btn-primary btn-large hidden">Aloita Peli</button>
+        <p id="waiting-host" class="info-text">Odotetaan isantaa aloittamaan peli...</p>
+      </div>
+    </div>
+
+    <!-- Answering Phase -->
+    <div id="answer-screen" class="screen">
+      <div class="container">
+        <div class="game-header">
+          <span class="round-info">Kierros <span id="current-round">1</span>/<span id="total-rounds">8</span></span>
+          <span class="timer" id="answer-timer">60</span>
+        </div>
+
+        <div class="category-badge" id="question-category"></div>
+        <h2 class="question" id="question-text"></h2>
+
+        <div class="answer-form">
+          <input type="text" id="answer-input" placeholder="Kirjoita vastauksesi..." maxlength="50" autocomplete="off">
+          <button id="submit-answer-btn" class="btn btn-primary">Laheta</button>
+        </div>
+
+        <div id="answer-status" class="status-text hidden">
+          <span class="checkmark">&#10003;</span> Vastaus lahetetty! Odotetaan muita...
+        </div>
+
+        <div class="progress-bar">
+          <span id="answers-count">0</span>/<span id="answers-total">0</span> vastannut
+        </div>
+      </div>
+    </div>
+
+    <!-- Voting Phase -->
+    <div id="vote-screen" class="screen">
+      <div class="container">
+        <div class="game-header">
+          <span class="round-info">Kierros <span id="vote-round">1</span>/<span id="vote-total-rounds">8</span></span>
+          <span class="timer" id="vote-timer">30</span>
+        </div>
+
+        <h2 class="question" id="vote-question-text"></h2>
+        <p class="vote-instruction">Valitse oikea vastaus:</p>
+
+        <div id="vote-options" class="vote-options"></div>
+
+        <div id="vote-status" class="status-text hidden">
+          <span class="checkmark">&#10003;</span> Aanesi on annettu!
+        </div>
+
+        <div class="progress-bar">
+          <span id="votes-count">0</span>/<span id="votes-total">0</span> aanestanyt
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Phase -->
+    <div id="results-screen" class="screen">
+      <div class="container">
+        <h2>Kierroksen tulokset</h2>
+
+        <div class="correct-answer-reveal">
+          <p>Oikea vastaus oli:</p>
+          <div class="correct-answer" id="correct-answer"></div>
+        </div>
+
+        <div id="results-list" class="results-list"></div>
+
+        <div class="leaderboard">
+          <h3>Tilanne</h3>
+          <div id="leaderboard"></div>
+        </div>
+
+        <div class="timer-bar">
+          <div class="timer-fill" id="results-timer-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="gameover-screen" class="screen">
+      <div class="container">
+        <h1 class="title">Peli ohi!</h1>
+
+        <div class="winner-display">
+          <div class="crown">&#x1F451;</div>
+          <h2 id="winner-name"></h2>
+          <p id="winner-score"></p>
+        </div>
+
+        <div id="final-leaderboard" class="final-leaderboard"></div>
+
+        <button id="play-again-btn" class="btn btn-primary btn-large hidden">Pelaa Uudestaan</button>
+        <p id="waiting-restart" class="info-text hidden">Odotetaan isantaa...</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="error-toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

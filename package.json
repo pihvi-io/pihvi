@@ -1,0 +1,25 @@
+{
+  "name": "huijari",
+  "version": "1.0.0",
+  "description": "Huijari - Suomalainen moninpeli huijauspeli (Finnish multiplayer bluffing game like Fibbage)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "game",
+    "multiplayer",
+    "finnish",
+    "fibbage",
+    "trivia",
+    "party-game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.0"
+  }
+}
